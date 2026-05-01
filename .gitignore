@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.hypothesis/
+*.db
+.env
+config.yaml
+.DS_Store
+.kiro_tmp/
