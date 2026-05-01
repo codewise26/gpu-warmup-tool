@@ -138,12 +138,17 @@ class WarmUpRunner:
             await client.send_join()
             await client.wait_for_welcome()
             await client.send_message(self.config.message)
+
+            # Mark time just before waiting for the AI agent response
+            ttfr_start = time.monotonic()
             await client.receive_response()
+            ttfr = time.monotonic() - ttfr_start
 
             duration = time.monotonic() - start
             return SessionResult(
                 iteration=iteration,
                 success=True,
+                time_to_first_response_seconds=round(ttfr, 2),
                 duration_seconds=round(duration, 2),
             )
         except TimeoutError as e:

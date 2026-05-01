@@ -64,7 +64,8 @@ class SessionResult(BaseModel):
 
     iteration: int  # 1-based
     success: bool
-    duration_seconds: float
+    time_to_first_response_seconds: Optional[float] = None  # Time from message sent to first AI response
+    duration_seconds: float  # Total duration of the full session lifecycle
     error: Optional[str] = None  # Set if session failed
 
 

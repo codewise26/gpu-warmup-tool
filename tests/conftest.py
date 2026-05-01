@@ -99,7 +99,7 @@ def build_warmup_report(n: int, failure_indices: set = None) -> WarmUpReport:
             ))
         else:
             results.append(SessionResult(
-                iteration=i, success=True, duration_seconds=1.0
+                iteration=i, success=True, time_to_first_response_seconds=0.5, duration_seconds=1.0
             ))
 
     successes = sum(1 for r in results if r.success)

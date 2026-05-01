@@ -134,9 +134,10 @@ def _print_report(report) -> None:
 
     for result in report.session_results:
         status = "✓ OK" if result.success else "✗ FAILED"
+        ttfr_info = f", TTFR: {result.time_to_first_response_seconds:.2f}s" if result.time_to_first_response_seconds is not None else ""
         error_info = f" — {result.error}" if result.error else ""
         print(f"  Session {result.iteration}: {status} "
-              f"({result.duration_seconds:.2f}s){error_info}")
+              f"(Total: {result.duration_seconds:.2f}s{ttfr_info}){error_info}")
 
     print("-" * 60)
     if report.failures == 0:
