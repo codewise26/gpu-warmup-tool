@@ -29,6 +29,8 @@ class TestWebApp:
         assert "deployment_id" in html
         assert "region" in html
         assert "message" in html
+        assert "escalation_message" in html
+        assert "disconnect_message" in html
         assert "count" in html
 
     def test_run_missing_deployment_id(self, client):
@@ -98,6 +100,21 @@ class TestWebApp:
         assert response.status_code == 200
         html = response.data.decode()
         assert "Waiting for results" in html
+
+    def test_deployment_id_and_region_persist_after_run(self, app, client):
+        """Verify deployment_id and region are remembered on the home page after a run."""
+        response = client.post("/run", data={
+            "deployment_id": "persist-deploy",
+            "region": "persist-region.com",
+            "message": "Warming up!",
+            "count": "1",
+        }, follow_redirects=False)
+        assert response.status_code == 302
+
+        response = client.get("/")
+        html = response.data.decode()
+        assert 'value="persist-deploy"' in html
+        assert 'value="persist-region.com"' in html
 
     def test_results_page_with_report(self, app, client):
         """Verify results page renders report data."""

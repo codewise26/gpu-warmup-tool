@@ -14,6 +14,8 @@ _ENV_VAR_MAP: dict[str, str] = {
     "GC_DEPLOYMENT_ID": "deployment_id",
     "GC_REGION": "region",
     "GC_WARMUP_MESSAGE": "message",
+    "GC_WARMUP_ESCALATION_MESSAGE": "escalation_message",
+    "GC_WARMUP_DISCONNECT_MESSAGE": "disconnect_message",
     "GC_WARMUP_COUNT": "count",
     "GC_WARMUP_ORIGIN": "origin",
     "GC_WARMUP_TIMEOUT": "timeout",

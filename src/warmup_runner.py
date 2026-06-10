@@ -13,7 +13,6 @@ from .models import (
 from .progress import ProgressEmitter
 from .web_messaging_client import WebMessagingClient, WebMessagingError
 
-
 def compute_exit_code(report: WarmUpReport) -> int:
     """Compute the exit code from a WarmUpReport.
 
@@ -49,10 +48,11 @@ class WarmUpRunner:
         For each iteration:
         1. Create a new WebMessagingClient
         2. Connect, send join, wait for welcome
-        3. Send warm-up message, wait for response
-        4. Disconnect
-        5. Record SessionResult (success/failure, duration, error)
-        6. Emit session_completed progress event
+        3. Send warm-up message, then on each agent reply send escalation message
+        4. Repeat until agent replies with the configured disconnect message
+        5. Disconnect, then proceed to the next iteration
+        6. Record SessionResult (success/failure, duration, error)
+        7. Emit session_completed progress event
 
         Returns:
             WarmUpReport with aggregated results.
@@ -139,10 +139,18 @@ class WarmUpRunner:
             await client.wait_for_welcome()
             await client.send_message(self.config.message)
 
-            # Mark time just before waiting for the AI agent response
             ttfr_start = time.monotonic()
-            await client.receive_response()
-            ttfr = time.monotonic() - ttfr_start
+            ttfr: float | None = None
+
+            while True:
+                response = await client.receive_response()
+                if ttfr is None:
+                    ttfr = time.monotonic() - ttfr_start
+
+                if response.strip() == self.config.disconnect_message:
+                    break
+
+                await client.send_message(self.config.escalation_message)
 
             duration = time.monotonic() - start
             return SessionResult(

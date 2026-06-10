@@ -16,6 +16,8 @@ class AppConfig(BaseModel):
     deployment_id: Optional[str] = None
     region: Optional[str] = None
     message: str = "Warming up!"
+    escalation_message: str = "I want to talk to human agent"
+    disconnect_message: str = "Disconnecting now"
     count: int = 1
     origin: str = "https://localhost"
     timeout: int = 30  # seconds
@@ -53,6 +55,20 @@ class AppConfig(BaseModel):
     def message_must_be_non_empty(cls, v):
         if v.strip() == "":
             raise ValueError("message must be non-empty")
+        return v
+
+    @field_validator("escalation_message")
+    @classmethod
+    def escalation_message_must_be_non_empty(cls, v):
+        if v.strip() == "":
+            raise ValueError("escalation_message must be non-empty")
+        return v
+
+    @field_validator("disconnect_message")
+    @classmethod
+    def disconnect_message_must_be_non_empty(cls, v):
+        if v.strip() == "":
+            raise ValueError("disconnect_message must be non-empty")
         return v
 
 

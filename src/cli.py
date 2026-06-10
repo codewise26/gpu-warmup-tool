@@ -44,6 +44,16 @@ def _parse_args(argv=None) -> argparse.Namespace:
         help='Warm-up message to send (default: "Warming up!")',
     )
     parser.add_argument(
+        "--escalation-message",
+        default=None,
+        help='Escalation message sent after each agent reply (default: "I want to talk to human agent")',
+    )
+    parser.add_argument(
+        "--disconnect-message",
+        default=None,
+        help='Agent reply that ends the iteration (default: "Disconnecting now")',
+    )
+    parser.add_argument(
         "--count",
         type=int,
         default=None,
@@ -80,6 +90,10 @@ def _validate_cli_args(args: argparse.Namespace) -> list[str]:
         errors.append("region must be non-empty")
     if args.message is not None and args.message.strip() == "":
         errors.append("message must be non-empty")
+    if args.escalation_message is not None and args.escalation_message.strip() == "":
+        errors.append("escalation_message must be non-empty")
+    if args.disconnect_message is not None and args.disconnect_message.strip() == "":
+        errors.append("disconnect_message must be non-empty")
     if args.count is not None and args.count < 1:
         errors.append("count must be a positive integer")
     if args.timeout is not None and args.timeout < 1:
@@ -105,6 +119,10 @@ def _merge_cli_overrides(config: AppConfig, args: argparse.Namespace) -> AppConf
         overrides["region"] = args.region
     if args.message is not None:
         overrides["message"] = args.message
+    if args.escalation_message is not None:
+        overrides["escalation_message"] = args.escalation_message
+    if args.disconnect_message is not None:
+        overrides["disconnect_message"] = args.disconnect_message
     if args.count is not None:
         overrides["count"] = args.count
     if args.origin is not None:

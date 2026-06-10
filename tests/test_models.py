@@ -13,6 +13,8 @@ class TestAppConfig:
         """Verify default values for optional fields."""
         config = AppConfig(deployment_id="test", region="test.com")
         assert config.message == "Warming up!"
+        assert config.escalation_message == "I want to talk to human agent"
+        assert config.disconnect_message == "Disconnecting now"
         assert config.count == 1
         assert config.origin == "https://localhost"
         assert config.timeout == 30

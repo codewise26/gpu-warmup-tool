@@ -120,7 +120,23 @@
             <input type="text" id="message" name="message"
                    value="{{ config.message or 'Warming up!' }}"
                    placeholder="Message to send (default: Warming up!)">
-            <div class="hint">This message will appear in your chat logs.</div>
+            <div class="hint">Sent first in each iteration, after the bot welcome.</div>
+        </div>
+
+        <div class="form-group">
+            <label for="escalation_message">Escalation Message</label>
+            <input type="text" id="escalation_message" name="escalation_message"
+                   value="{{ config.escalation_message or 'I want to talk to human agent' }}"
+                   placeholder="Sent after each agent reply (default: I want to talk to human agent)">
+            <div class="hint">Sent repeatedly after agent replies until the disconnect message is received.</div>
+        </div>
+
+        <div class="form-group">
+            <label for="disconnect_message">Disconnect Message</label>
+            <input type="text" id="disconnect_message" name="disconnect_message"
+                   value="{{ config.disconnect_message or 'Disconnecting now' }}"
+                   placeholder="Agent reply that ends the iteration (default: Disconnecting now)">
+            <div class="hint">The iteration completes when the agent sends this exact text.</div>
         </div>
 
         <div class="form-group">

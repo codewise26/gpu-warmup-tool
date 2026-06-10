@@ -9,6 +9,7 @@ import json
 import os
 import queue
 import threading
+from types import SimpleNamespace
 from typing import Optional
 
 from flask import (
@@ -25,6 +26,51 @@ from .models import AppConfig, WarmUpReport
 from .progress import ProgressEmitter
 from .warmup_runner import WarmUpRunner
 
+# Web form fields persisted across runs (in-memory for the app process lifetime).
+_PERSISTED_WEB_FIELDS = ("deployment_id", "region")
+
+
+def _config_for_home(app: Flask) -> AppConfig:
+    """Load config for the home page, including last-submitted web form values."""
+    config = load_app_config()
+    persisted = app.config.get("persisted_web_config")
+    if persisted:
+        config = merge_config(config, persisted)
+    return config
+
+
+def _persist_web_fields(app: Flask, overrides: dict) -> None:
+    """Remember deployment_id and region from the last successful form submission."""
+    app.config["persisted_web_config"] = {
+        key: overrides[key]
+        for key in _PERSISTED_WEB_FIELDS
+        if overrides.get(key)
+    }
+
+
+def _config_from_form_submission(
+    base_config: AppConfig,
+    deployment_id: str,
+    region: str,
+    message: str,
+    escalation_message: str,
+    disconnect_message: str,
+    count: str,
+    origin: str,
+    timeout: str,
+) -> SimpleNamespace:
+    """Rebuild display config from raw form fields for re-rendering after validation errors."""
+    return SimpleNamespace(
+        deployment_id=deployment_id or base_config.deployment_id or "",
+        region=region or base_config.region or "",
+        message=message or base_config.message or "Warming up!",
+        escalation_message=escalation_message or base_config.escalation_message,
+        disconnect_message=disconnect_message or base_config.disconnect_message,
+        count=count if count != "" else base_config.count,
+        origin=origin or base_config.origin or "https://localhost",
+        timeout=timeout if timeout != "" else base_config.timeout,
+    )
+
 
 def create_app() -> Flask:
     """Create and configure the Flask application."""
@@ -40,14 +86,14 @@ def create_app() -> Flask:
     app.config["latest_report"]: Optional[WarmUpReport] = None
     app.config["progress_emitter"] = ProgressEmitter()
     app.config["run_active"] = False
+    app.config["persisted_web_config"] = {}
 
     @app.route("/")
     def home():
         """Home page with config inputs."""
-        base_config = load_app_config()
         return render_template(
             "home.html",
-            config=base_config,
+            config=_config_for_home(app),
             errors=None,
         )
 
@@ -60,6 +106,8 @@ def create_app() -> Flask:
         deployment_id = request.form.get("deployment_id", "").strip()
         region = request.form.get("region", "").strip()
         message = request.form.get("message", "").strip()
+        escalation_message = request.form.get("escalation_message", "").strip()
+        disconnect_message = request.form.get("disconnect_message", "").strip()
         count = request.form.get("count", "").strip()
         origin = request.form.get("origin", "").strip()
         timeout = request.form.get("timeout", "").strip()
@@ -90,7 +138,17 @@ def create_app() -> Flask:
         if errors:
             return render_template(
                 "home.html",
-                config=base_config,
+                config=_config_from_form_submission(
+                    _config_for_home(app),
+                    deployment_id,
+                    region,
+                    message,
+                    escalation_message,
+                    disconnect_message,
+                    count,
+                    origin,
+                    timeout,
+                ),
                 errors=errors,
             )
 
@@ -102,6 +160,10 @@ def create_app() -> Flask:
             web_overrides["region"] = region
         if message:
             web_overrides["message"] = message
+        if escalation_message:
+            web_overrides["escalation_message"] = escalation_message
+        if disconnect_message:
+            web_overrides["disconnect_message"] = disconnect_message
         if count:
             web_overrides["count"] = count
         if origin:
@@ -119,9 +181,21 @@ def create_app() -> Flask:
             ]
             return render_template(
                 "home.html",
-                config=base_config,
+                config=_config_from_form_submission(
+                    _config_for_home(app),
+                    deployment_id,
+                    region,
+                    message,
+                    escalation_message,
+                    disconnect_message,
+                    count,
+                    origin,
+                    timeout,
+                ),
                 errors=errors,
             )
+
+        _persist_web_fields(app, web_overrides)
 
         # Create a fresh progress emitter for this run
         progress_emitter = ProgressEmitter()

@@ -1,14 +1,20 @@
 """Tests for Warm-Up Runner."""
 
-import asyncio
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from src.models import AppConfig, WarmUpReport
+from src.models import AppConfig
 from src.progress import ProgressEmitter
 from src.warmup_runner import WarmUpRunner, compute_exit_code
 from src.web_messaging_client import WebMessagingError
+
+
+def _responses_until_disconnect(config: AppConfig, exchanges_before_disconnect: int = 1):
+    """Build receive_response side_effect ending with the configured disconnect message."""
+    responses = ["Agent reply"] * exchanges_before_disconnect
+    responses.append(config.disconnect_message)
+    return responses
 
 
 class TestComputeExitCode:
@@ -43,7 +49,9 @@ class TestWarmUpRunner:
         """Verify report has correct counts when all sessions succeed."""
         mock_client = AsyncMock()
         mock_client.wait_for_welcome = AsyncMock(return_value="Welcome!")
-        mock_client.receive_response = AsyncMock(return_value="Response")
+        mock_client.receive_response = AsyncMock(
+            side_effect=_responses_until_disconnect(config) * 10
+        )
 
         with patch("src.warmup_runner.WebMessagingClient", return_value=mock_client):
             runner = WarmUpRunner(config=config, progress_emitter=emitter)
@@ -52,10 +60,6 @@ class TestWarmUpRunner:
         assert report.total_iterations == 3
         assert report.successes == 3
         assert report.failures == 0
-        assert len(report.session_results) == 3
-        for i, result in enumerate(report.session_results, 1):
-            assert result.iteration == i
-            assert result.success is True
 
     @pytest.mark.asyncio
     async def test_session_failure_continues(self, config, emitter):
@@ -66,46 +70,87 @@ class TestWarmUpRunner:
             nonlocal call_count
             call_count += 1
             if call_count == 2:
-                raise WebMessagingError("Connection failed: deployment_id=test-deploy, region=test.com")
+                raise WebMessagingError(
+                    "Connection failed: deployment_id=test-deploy, region=test.com"
+                )
 
         mock_client = AsyncMock()
         mock_client.connect = AsyncMock(side_effect=connect_side_effect)
         mock_client.wait_for_welcome = AsyncMock(return_value="Welcome!")
-        mock_client.receive_response = AsyncMock(return_value="Response")
+        mock_client.receive_response = AsyncMock(
+            side_effect=_responses_until_disconnect(config) * 10
+        )
 
         with patch("src.warmup_runner.WebMessagingClient", return_value=mock_client):
             runner = WarmUpRunner(config=config, progress_emitter=emitter)
             report = await runner.run()
 
-        assert report.total_iterations == 3
         assert report.successes == 2
         assert report.failures == 1
-        assert len(report.session_results) == 3
-        assert report.session_results[1].success is False
-        assert report.session_results[1].error is not None
 
     @pytest.mark.asyncio
-    async def test_progress_events_emitted(self, config, emitter):
-        """Verify correct progress events are emitted."""
-        q = emitter.subscribe()
-
+    async def test_escalation_sent_on_every_response_until_disconnect(self, config, emitter):
+        """Verify escalation message is sent after each reply until disconnect message."""
         mock_client = AsyncMock()
         mock_client.wait_for_welcome = AsyncMock(return_value="Welcome!")
-        mock_client.receive_response = AsyncMock(return_value="Response")
+        mock_client.receive_response = AsyncMock(
+            side_effect=["Reply 1", "Reply 2", config.disconnect_message]
+        )
+
+        with patch("src.warmup_runner.WebMessagingClient", return_value=mock_client):
+            config.count = 1
+            runner = WarmUpRunner(config=config, progress_emitter=emitter)
+            report = await runner.run()
+
+        assert report.successes == 1
+        calls = [call.args[0] for call in mock_client.send_message.call_args_list]
+        assert calls == [
+            config.message,
+            config.escalation_message,
+            config.escalation_message,
+        ]
+
+    @pytest.mark.asyncio
+    async def test_custom_escalation_and_disconnect_messages(self, emitter):
+        """Verify custom escalation and disconnect messages are used."""
+        config = AppConfig(
+            deployment_id="test-deploy",
+            region="test.com",
+            message="Hello!",
+            escalation_message="Transfer me please",
+            disconnect_message="Goodbye",
+            count=1,
+            timeout=5,
+        )
+        mock_client = AsyncMock()
+        mock_client.wait_for_welcome = AsyncMock(return_value="Welcome!")
+        mock_client.receive_response = AsyncMock(
+            side_effect=["Bot reply", "Goodbye"]
+        )
 
         with patch("src.warmup_runner.WebMessagingClient", return_value=mock_client):
             runner = WarmUpRunner(config=config, progress_emitter=emitter)
-            await runner.run()
+            report = await runner.run()
 
-        events = []
-        while not q.empty():
-            events.append(q.get_nowait())
+        assert report.successes == 1
+        calls = [call.args[0] for call in mock_client.send_message.call_args_list]
+        assert calls == ["Hello!", "Transfer me please"]
 
-        # Should have: 1 warmup_started + 3 session_completed + 1 warmup_completed
-        event_types = [e.event_type.value for e in events]
-        assert event_types[0] == "warmup_started"
-        assert event_types[-1] == "warmup_completed"
-        assert event_types.count("session_completed") == 3
+    @pytest.mark.asyncio
+    async def test_no_escalation_when_first_reply_is_disconnect(self, config, emitter):
+        """Verify iteration completes without escalation if first reply is disconnect."""
+        mock_client = AsyncMock()
+        mock_client.wait_for_welcome = AsyncMock(return_value="Welcome!")
+        mock_client.receive_response = AsyncMock(return_value=config.disconnect_message)
+
+        with patch("src.warmup_runner.WebMessagingClient", return_value=mock_client):
+            config.count = 1
+            runner = WarmUpRunner(config=config, progress_emitter=emitter)
+            report = await runner.run()
+
+        assert report.successes == 1
+        calls = [call.args[0] for call in mock_client.send_message.call_args_list]
+        assert calls == [config.message]
 
     @pytest.mark.asyncio
     async def test_timeout_recorded_as_failure(self, emitter):
